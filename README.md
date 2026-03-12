@@ -1,2 +1,0 @@
-# matches-analyzer
-index.html
