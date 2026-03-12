@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <title>Blueprint Market Analyzer</title>
+    <!-- Load Deriv API from CDN -->
+    <script src="https://unpkg.com/@deriv/deriv-api/dist/DerivAPIBasic.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 16px;
+            padding-bottom: 100px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-top: 10px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            margin-top: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .status-badge.connecting {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-badge.connected {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .price-display {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .price-main {
+            font-size: 2.5rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 8px;
+            transition: color 0.3s;
+        }
+
+        .price-main.up { color: var(--success); }
+        .price-main.down { color: var(--danger); }
+
+        .price-info {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .chart-container {
+            height: 150px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            margin-top: 10px;
+            position: relative;
+        }
+
+        #tickChart {
+            width: 100%;
+            height: 100%;
+        }
+
+        .error-box {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger);
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            display: none;
+        }
+
+        .error-box.show {
+            display: block;
+        }
+
+        .solution-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: var(--primary);
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            display: none;
+        }
+
+        .solution-box.show {
+            display: block;
+        }
+
+        .predict-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .predict-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .signal-result {
+            margin-top: 20px;
+            padding: 24px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 16px;
+            display: none;
+            text-align: center;
+        }
+
+        .signal-result.show {
+            display: block;
+        }
+
+        .signal-digit {
+            font-size: 4rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: var(--bg-dark);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .prob-bars {
+            margin-top: 12px;
+        }
+
+        .prob-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            gap: 8px;
+        }
+
+        .prob-digit {
+            width: 20px;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .prob-bar-wrap {
+            flex: 1;
+            height: 20px;
+            background: var(--bg-dark);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .prob-bar {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 6px;
+            font-size: 0.75rem;
+            color: white;
+            transition: width 0.3s;
+        }
+
+        .prob-bar.high { background: var(--success); }
+        .prob-bar.medium { background: var(--warning); }
+        .prob-bar.low { background: var(--danger); }
+
+        .digits-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .digit-box {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-weight: 700;
+        }
+
+        .digit-box.recent {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔷 Blueprint Market Analyzer</h1>
+        <p>Real-Time Deriv Data</p>
+        <div class="status-badge connecting" id="statusBadge">
+            <span>●</span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="error-box" id="errorBox">
+        <strong>Connection Failed</strong><br>
+        WebSocket cannot connect from local file. 
+    </div>
+
+    <div class="solution-box" id="solutionBox">
+        <strong>✅ SOLUTION:</strong><br>
+        To use REAL data, you must:<br>
+        1. Upload this file to GitHub Pages (FREE)<br>
+        2. Or use Netlify/Vercel<br>
+        3. Or run on localhost with HTTPS<br>
+        <br>
+        <strong>Mobile browsers block WebSocket from local files for security.</strong>
+    </div>
+
+    <!-- Price Card -->
+    <div class="card">
+        <div class="card-title">
+            <span>Live Market Data</span>
+            <span id="marketName">R_100</span>
+        </div>
+        <div class="price-display">
+            <div class="price-main" id="currentPrice">--.--</div>
+            <div class="price-info">
+                <span id="lastDigit">Last: -</span>
+                <span id="tickCount">Ticks: 0</span>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="tickChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Signal Card -->
+    <div class="card">
+        <div class="card-title">
+            <span>Prediction Engine</span>
+            <span>MATCHES</span>
+        </div>
+        <button class="predict-btn" id="predictBtn" onclick="generateSignal()" disabled>
+            🔮 ANALYZE MARKET
+        </button>
+        <div class="signal-result" id="signalResult">
+            <div class="signal-digit" id="signalDigit">-</div>
+            <div id="signalLabel">Analysis complete</div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+        <div class="card-title">Configuration</div>
+        <div class="control-grid">
+            <div>
+                <label style="font-size: 0.7rem; color: var(--text-secondary);">Market</label>
+                <select id="marketSelect" onchange="changeMarket()">
+                    <option value="R_10">Volatility 10</option>
+                    <option value="R_25">Volatility 25</option>
+                    <option value="R_50">Volatility 50</option>
+                    <option value="R_75">Volatility 75</option>
+                    <option value="R_100" selected>Volatility 100</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.7rem; color: var(--text-secondary);">Strategy</label>
+                <select id="strategySelect">
+                    <option value="matches" selected>Matches</option>
+                    <option value="even_odd">Even/Odd</option>
+                    <option value="over_under">Over/Under</option>
+                    <option value="differs">Differs</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics -->
+    <div class="card">
+        <div class="card-title">Analytics</div>
+        <div class="analytics-grid">
+            <div class="stat-box">
+                <div class="stat-value" id="entropyVal">--</div>
+                <div class="stat-label">Entropy</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="trendVal">--</div>
+                <div class="stat-label">Trend</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="streakVal">--</div>
+                <div class="stat-label">Streak</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="ghostVal">--</div>
+                <div class="stat-label">Ghosts</div>
+            </div>
+        </div>
+        <div class="prob-bars" id="probBars"></div>
+        <div style="margin-top: 16px; font-size: 0.8rem; color: var(--text-secondary);">Last 50 Digits:</div>
+        <div class="digits-grid" id="digitsGrid"></div>
+    </div>
+
+    <script>
+        // ==================== STATE ====================
+        const state = {
+            api: null,
+            connection: null,
+            connected: false,
+            market: 'R_100',
+            ticks: [],
+            digits: [],
+            lastPrice: 0
+        };
+
+        // ==================== INITIALIZATION ====================
+        window.addEventListener('DOMContentLoaded', () => {
+            initProbBars();
+            
+            // Check if running from local file
+            if (window.location.protocol === 'file:' || window.location.href.includes('content://')) {
+                showLocalFileError();
+                return;
+            }
+            
+            // Try to connect using Deriv API library
+            try {
+                connectToDeriv();
+            } catch (e) {
+                console.error('Connection error:', e);
+                showError('Failed to initialize connection');
+            }
+        });
+
+        function showLocalFileError() {
+            document.getElementById('statusBadge').className = 'status-badge error';
+            document.getElementById('statusText').textContent = 'Local File - Blocked';
+            document.getElementById('errorBox').classList.add('show');
+            document.getElementById('solutionBox').classList.add('show');
+            document.getElementById('predictBtn').disabled = true;
+        }
+
+        function showError(msg) {
+            document.getElementById('statusBadge').className = 'status-badge error';
+            document.getElementById('statusText').textContent = 'Error';
+            const errorBox = document.getElementById('errorBox');
+            errorBox.textContent = msg;
+            errorBox.classList.add('show');
+        }
+
+        // ==================== CONNECTION ====================
+        function connectToDeriv() {
+            // Use DerivAPIBasic from CDN
+            if (typeof DerivAPIBasic === 'undefined') {
+                showError('Failed to load Deriv API library');
+                return;
+            }
+
+            // Create connection
+            state.connection = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+            state.api = new DerivAPIBasic({ connection: state.connection });
+
+            state.connection.onopen = () => {
+                console.log('WebSocket connected');
+                state.connected = true;
+                document.getElementById('statusBadge').className = 'status-badge connected';
+                document.getElementById('statusText').textContent = 'Live';
+                document.getElementById('predictBtn').disabled = false;
+                subscribeToTicks();
+            };
+
+            state.connection.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+
+            state.connection.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showError('Connection error. Check internet.');
+            };
+
+            state.connection.onclose = () => {
+                state.connected = false;
+                document.getElementById('statusBadge').className = 'status-badge error';
+                document.getElementById('statusText').textContent = 'Disconnected';
+                
+                // Auto reconnect
+                setTimeout(() => {
+                    if (!state.connected) connectToDeriv();
+                }, 5000);
+            };
+        }
+
+        function subscribeToTicks() {
+            if (!state.connected) return;
+            
+            state.connection.send(JSON.stringify({
+                ticks: state.market,
+                subscribe: 1
+            }));
+        }
+
+        function handleMessage(data) {
+            if (data.error) {
+                console.error('API Error:', data.error);
+                return;
+            }
+
+            if (data.msg_type === 'tick') {
+                processTick(data.tick);
+            }
+        }
+
+        function processTick(tick) {
+            const price = tick.quote;
+            const digit = Math.floor(price * 100) % 10;
+            
+            // Update display
+            const priceEl = document.getElementById('currentPrice');
+            const prevPrice = state.lastPrice;
+            
+            priceEl.textContent = price.toFixed(2);
+            priceEl.className = 'price-main ' + (price > prevPrice ? 'up' : price < prevPrice ? 'down' : '');
+            
+            document.getElementById('lastDigit').textContent = `Last: ${digit}`;
+            
+            // Store data
+            state.ticks.push(price);
+            state.digits.push(digit);
+            state.lastPrice = price;
+            
+            if (state.ticks.length > 1000) {
+                state.ticks.shift();
+                state.digits.shift();
+            }
+            
+            document.getElementById('tickCount').textContent = `Ticks: ${state.digits.length}`;
+            
+            updateAnalytics();
+            updateChart();
+            updateDigitsGrid();
+        }
+
+        // ==================== ANALYTICS ====================
+        function updateAnalytics() {
+            if (state.digits.length < 10) return;
+            
+            const recent = state.digits.slice(-100);
+            const freqs = new Array(10).fill(0);
+            recent.forEach(d => freqs[d]++);
+            
+            // Entropy
+            let entropy = 0;
+            freqs.forEach(f => {
+                if (f > 0) {
+                    const p = f / recent.length;
+                    entropy -= p * Math.log2(p);
+                }
+            });
+            
+            document.getElementById('entropyVal').textContent = (entropy / Math.log2(10) * 100).toFixed(0) + '%';
+            document.getElementById('trendVal').textContent = '--';
+            document.getElementById('streakVal').textContent = '--';
+            document.getElementById('ghostVal').textContent = '--';
+            
+            // Update prob bars
+            const max = Math.max(...freqs);
+            freqs.forEach((f, i) => {
+                const bar = document.getElementById(`prob-bar-${i}`);
+                const pct = (f / recent.length * 100).toFixed(1);
+                bar.style.width = Math.max(pct * 2, 5) + '%';
+                bar.textContent = pct + '%';
+                bar.className = 'prob-bar ' + (f === max ? 'high' : f > 5 ? 'medium' : 'low');
+            });
+        }
+
+        function updateChart() {
+            const canvas = document.getElementById('tickChart');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = canvas.offsetWidth * 2;
+            canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+            
+            const w = canvas.offsetWidth;
+            const h = canvas.offsetHeight;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            const prices = state.ticks.slice(-50);
+            if (prices.length < 2) return;
+            
+            const min = Math.min(...prices) * 0.999;
+            const max = Math.max(...prices) * 1.001;
+            const range = max - min;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            
+            prices.forEach((p, i) => {
+                const x = (i / (prices.length - 1)) * w;
+                const y = h - ((p - min) / range) * h;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+
+        function updateDigitsGrid() {
+            const el = document.getElementById('digitsGrid');
+            const recent = state.digits.slice(-50);
+            el.innerHTML = recent.map((d, i) => 
+                `<div class="digit-box ${i >= recent.length - 5 ? 'recent' : ''}">${d}</div>`
+            ).join('');
+        }
+
+        // ==================== PREDICTION ====================
+        function generateSignal() {
+            if (state.digits.length < 20) return;
+            
+            const recent = state.digits.slice(-100);
+            const freqs = new Array(10).fill(0);
+            recent.forEach(d => freqs[d]++);
+            
+            const maxFreq = Math.max(...freqs);
+            const prediction = freqs.indexOf(maxFreq);
+            
+            document.getElementById('signalDigit').textContent = prediction;
+            document.getElementById('signalResult').classList.add('show');
+        }
+
+        function changeMarket() {
+            const select = document.getElementById('marketSelect');
+            state.market = select.value;
+            document.getElementById('marketName').textContent = state.market;
+            
+            // Unsubscribe old, subscribe new
+            if (state.connected) {
+                state.connection.send(JSON.stringify({
+                    ticks: state.market,
+                    subscribe: 0
+                }));
+                setTimeout(subscribeToTicks, 500);
+            }
+        }
+
+        function initProbBars() {
+            const container = document.getElementById('probBars');
+            for (let i = 0; i < 10; i++) {
+                const row = document.createElement('div');
+                row.className = 'prob-row';
+                row.innerHTML = `
+                    <div class="prob-digit">${i}</div>
+                    <div class="prob-bar-wrap">
+                        <div class="prob-bar" id="prob-bar-${i}" style="width: 10%">--</div>
+                    </div>
+                `;
+                container.appendChild(row);
+            }
+        }
+    </script>
+</body>
+</html>
